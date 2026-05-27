@@ -1,0 +1,38 @@
+name: Stage 01 - Lint & Format
+#  name of stage 
+
+on: # the conditions to run this workflow
+  push: # when push to main
+    branches: [ "main" ]
+  pull_request: # when pull request to main
+    branches: [ "main" ]
+
+jobs: # what to do when the conditions are met 
+  lint-backend: # check backend code
+    runs-on: ubuntu-latest # run on ubuntu (work on virtual machine)
+    steps: # steps to run
+      - uses: actions/checkout@v4 # clone repo to virtual machine
+      - name: Set up Python # setup python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Ruff # install ruff for linting and format checking
+        run: pip install ruff
+      - name: Run Ruff (Python Linting) # run ruff for linting and format checking
+        run: ruff check ./backend
+  
+  # do the same thing as above but for frontend
+  lint-frontend: # check frontend code
+    runs-on: ubuntu-latest # run on ubuntu (work on virtual machine)
+    steps: # steps to run
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
+      - name: Run Prettier (JS Format Check)
+        working-directory: ./frontend
+        run: npx prettier --check "src/**/*.{js,jsx,css}"
