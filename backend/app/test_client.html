@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gesture DJ — WS Test Client</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f0f; color: #e0e0e0; font-family: 'Courier New', monospace; padding: 24px; }
+  h1 { color: #a78bfa; margin-bottom: 4px; font-size: 20px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .card { background: #1a1a2e; border: 1px solid #2d2d4e; border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 13px; color: #7c3aed; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+  .status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; }
+  .dot.connected { background: #22c55e; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  button { background: #7c3aed; color: white; border: none; border-radius: 6px; padding: 8px 16px;
+           cursor: pointer; font-size: 13px; font-family: inherit; margin-right: 8px; margin-bottom: 8px; }
+  button:hover { background: #6d28d9; }
+  button.danger { background: #dc2626; }
+  button.danger:hover { background: #b91c1c; }
+  button:disabled { background: #374151; cursor: not-allowed; }
+
+  label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px; margin-top: 10px; }
+  input[type=range] { width: 100%; accent-color: #7c3aed; }
+  .val { color: #a78bfa; font-weight: bold; font-size: 13px; }
+
+  .meter { background: #111827; border-radius: 4px; height: 12px; margin-top: 4px; overflow: hidden; }
+  .meter-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); transition: width .1s; border-radius: 4px; }
+
+  .log { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px;
+         height: 260px; overflow-y: auto; font-size: 12px; }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1a1a; }
+  .log-entry.rx  { color: #34d399; }
+  .log-entry.tx  { color: #60a5fa; }
+  .log-entry.err { color: #f87171; }
+  .log-entry.sys { color: #fbbf24; }
+  .log-entry.swipe { color: #f472b6; font-weight: bold; }
+
+  .readout { display: flex; justify-content: space-between; margin-top: 8px; }
+  .readout span { font-size: 22px; font-weight: bold; color: #a78bfa; }
+  .readout small { font-size: 11px; color: #6b7280; display: block; }
+  .swipe-flash { background: #2d1b4e; border: 1px solid #7c3aed; border-radius: 8px;
+                 padding: 10px; text-align: center; font-size: 18px; min-height: 44px;
+                 transition: background .3s; }
+  .fps { color: #6b7280; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>🎛 Gesture DJ — Backend Test Client</h1>
+<p class="subtitle">Giả lập Frontend gửi landmarks qua WebSocket · Không cần camera</p>
+
+<div class="grid">
+  <!-- Connection -->
+  <div class="card">
+    <h2>Connection</h2>
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <span id="status-text">Disconnected</span>
+    </div>
+    <button id="btn-connect">Connect</button>
+    <button id="btn-disconnect" class="danger" disabled>Disconnect</button>
+    <div style="margin-top:10px; font-size:12px; color:#6b7280;">
+      ws://localhost:8000/ws/gesture
+    </div>
+  </div>
+
+  <!-- Simulate -->
+  <div class="card">
+    <h2>Simulate Gesture</h2>
+
+    <label>Pinch Distance (volume) — <span class="val" id="pinch-val">0.15</span></label>
+    <input type="range" id="pinch" min="0.03" max="0.30" step="0.01" value="0.15">
+
+    <label>Wrist Y (tempo) — <span class="val" id="wristy-val">0.50</span></label>
+    <input type="range" id="wristy" min="0.0" max="1.0" step="0.01" value="0.50">
+
+    <div style="margin-top:12px;">
+      <button id="btn-swipe-left">← Swipe Left</button>
+      <button id="btn-swipe-right">Swipe Right →</button>
+    </div>
+    <div style="margin-top:8px;">
+      <button id="btn-nolm">Send null landmarks (tracking lost)</button>
+    </div>
+  </div>
+
+  <!-- Live Readout -->
+  <div class="card">
+    <h2>Backend Response</h2>
+    <div class="readout">
+      <div>
+        <small>VOLUME</small>
+        <span id="out-volume">—</span>
+      </div>
+      <div>
+        <small>TEMPO</small>
+        <span id="out-tempo">—</span>
+      </div>
+      <div>
+        <small>FRAMES</small>
+        <span id="out-frames">0</span>
+      </div>
+    </div>
+    <div class="meter"><div class="meter-fill" id="vol-meter" style="width:0%"></div></div>
+    <div style="margin-top:10px;">
+      <small style="color:#6b7280">SWIPE DETECTED</small>
+      <div class="swipe-flash" id="swipe-display">—</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="card">
+    <h2>REST Stats</h2>
+    <button id="btn-health">GET /health</button>
+    <button id="btn-config">GET /config</button>
+    <button id="btn-stats">GET /stats</button>
+    <pre id="rest-out" style="margin-top:10px;font-size:11px;color:#34d399;white-space:pre-wrap;max-height:120px;overflow-y:auto;"></pre>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="card" style="margin-bottom:0">
+  <h2 style="display:flex;justify-content:space-between">
+    Message Log
+    <button onclick="document.getElementById('log').innerHTML=''" style="padding:2px 8px;font-size:11px">Clear</button>
+  </h2>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+let ws = null;
+let frameTimer = null;
+let frameCount = 0;
+let swipeTimer = null;
+
+const $ = id => document.getElementById(id);
+
+// ── Logging ──────────────────────────────────────────────────────────────────
+function log(msg, type = 'sys') {
+  const el = document.createElement('div');
+  el.className = `log-entry ${type}`;
+  const ts = new Date().toLocaleTimeString('en', {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:2});
+  el.textContent = `[${ts}] ${msg}`;
+  const logEl = $('log');
+  logEl.appendChild(el);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ── Build fake landmarks ──────────────────────────────────────────────────────
+function buildLandmarks(pinchDist, wristY, wristX = 0.5) {
+  // 21 landmarks; only indices 0, 4, 8 are meaningful for the engine
+  const lm = Array.from({length: 21}, () => ({x: 0.5, y: 0.5, z: 0.0}));
+  lm[0] = {x: wristX, y: parseFloat(wristY), z: 0.0};      // WRIST
+  lm[4] = {x: 0.5,    y: 0.5,               z: 0.0};       // THUMB_TIP
+  lm[8] = {x: 0.5 + parseFloat(pinchDist), y: 0.5, z: 0.0}; // INDEX_TIP
+  return lm;
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connect() {
+  ws = new WebSocket('ws://localhost:8000/ws/gesture');
+
+  ws.onopen = () => {
+    $('dot').classList.add('connected');
+    $('status-text').textContent = 'Connected';
+    $('btn-connect').disabled = true;
+    $('btn-disconnect').disabled = false;
+    log('WebSocket connected ✅', 'sys');
+    startStreaming();
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    frameCount++;
+    $('out-frames').textContent = frameCount;
+
+    if (data.type === 'audio') {
+      $('out-volume').textContent = data.volume.toFixed(3);
+      $('out-tempo').textContent  = data.tempo.toFixed(3);
+      $('vol-meter').style.width  = (data.volume * 100) + '%';
+      if (frameCount % 10 === 0)  // log every 10 frames to avoid spam
+        log(`← audio  volume=${data.volume.toFixed(3)}  tempo=${data.tempo.toFixed(3)}`, 'rx');
+    }
+    else if (data.type === 'swipe') {
+      const arrow = data.direction === 'right' ? '→' : '←';
+      $('swipe-display').textContent = `${arrow}  SWIPE ${data.direction.toUpperCase()}  (vel=${data.velocity})`;
+      $('swipe-display').style.background = '#3b1f6e';
+      clearTimeout(swipeTimer);
+      swipeTimer = setTimeout(() => {
+        $('swipe-display').style.background = '';
+        $('swipe-display').textContent = '—';
+      }, 1500);
+      log(`← SWIPE ${data.direction}  velocity=${data.velocity}`, 'swipe');
+    }
+    else if (data.type === 'tracking_lost') {
+      log('← tracking_lost', 'err');
+    }
+    else if (data.type === 'error') {
+      log(`← ERROR [${data.code}] ${data.detail}`, 'err');
+    }
+  };
+
+  ws.onclose = () => {
+    $('dot').classList.remove('connected');
+    $('status-text').textContent = 'Disconnected';
+    $('btn-connect').disabled = false;
+    $('btn-disconnect').disabled = true;
+    stopStreaming();
+    log('WebSocket disconnected', 'sys');
+  };
+
+  ws.onerror = () => log('WebSocket error ❌', 'err');
+}
+
+function disconnect() {
+  if (ws) ws.close();
+}
+
+// ── Streaming loop (30 fps) ───────────────────────────────────────────────────
+function startStreaming() {
+  frameTimer = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const pinch  = $('pinch').value;
+    const wristY = $('wristy').value;
+    const payload = {
+      landmarks: buildLandmarks(pinch, wristY),
+      frame_ts: performance.now()
+    };
+    ws.send(JSON.stringify(payload));
+  }, 33); // ~30 fps
+}
+
+function stopStreaming() {
+  clearInterval(frameTimer);
+}
+
+// ── Swipe simulation ──────────────────────────────────────────────────────────
+function simulateSwipe(direction) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log('Not connected', 'err'); return;
+  }
+  stopStreaming();
+
+  const frames = 10;
+  const step   = direction === 'right' ? 0.03 : -0.03;
+  let i = 0;
+  log(`→ Simulating swipe ${direction}...`, 'tx');
+
+  const swipeTimer = setInterval(() => {
+    const wristX = 0.2 + i * step;
+    const lm = buildLandmarks($('pinch').value, $('wristy').value, wristX);
+    ws.send(JSON.stringify({landmarks: lm, frame_ts: performance.now()}));
+    i++;
+    if (i >= frames) { clearInterval(swipeTimer); startStreaming(); }
+  }, 30);
+}
+
+// ── Slider live labels ────────────────────────────────────────────────────────
+$('pinch').oninput  = e => $('pinch-val').textContent  = parseFloat(e.target.value).toFixed(2);
+$('wristy').oninput = e => $('wristy-val').textContent = parseFloat(e.target.value).toFixed(2);
+
+// ── Button wiring ─────────────────────────────────────────────────────────────
+$('btn-connect').onclick    = connect;
+$('btn-disconnect').onclick = disconnect;
+$('btn-swipe-left').onclick  = () => simulateSwipe('left');
+$('btn-swipe-right').onclick = () => simulateSwipe('right');
+$('btn-nolm').onclick = () => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({landmarks: null}));
+  log('→ sent null landmarks', 'tx');
+};
+
+// ── REST buttons ──────────────────────────────────────────────────────────────
+async function restCall(path) {
+  try {
+    const r = await fetch('http://localhost:8000' + path);
+    const j = await r.json();
+    $('rest-out').textContent = JSON.stringify(j, null, 2);
+    log(`GET ${path} → ${r.status}`, 'tx');
+  } catch(e) { log(`REST error: ${e.message}`, 'err'); }
+}
+$('btn-health').onclick = () => restCall('/api/health');
+$('btn-config').onclick = () => restCall('/api/config');
+$('btn-stats').onclick  = () => restCall('/api/stats');
+</script>
+</body>
+</html>
