@@ -28,7 +28,6 @@ from schemas.payload import (
     AudioCommand,
     SwipeCommand,
     SwipeDirection,
-    TrackingLostCommand,
 )
 
 # MediaPipe landmark indices

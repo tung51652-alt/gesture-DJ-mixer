@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Dict, Optional
+from typing import Dict
 from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
